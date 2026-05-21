@@ -1,3 +1,5 @@
+// Package db opens the postgres pool and applies the embedded
+// migrations on startup.
 package db
 
 import (
@@ -15,10 +17,13 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// DB wraps the application's postgres connection pool.
 type DB struct {
 	Pool *pgxpool.Pool
 }
 
+// Open reads DATABASE_URL, opens a connection pool, pings to
+// confirm it works, and runs any pending migrations.
 func Open(ctx context.Context) (*DB, error) {
 	url := os.Getenv("DATABASE_URL")
 
@@ -32,7 +37,6 @@ func Open(ctx context.Context) (*DB, error) {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
 	}
 
-	// connection caps
 	cfg.MaxConns = 25
 	cfg.MinConns = 2
 	cfg.MaxConnLifetime = time.Hour
@@ -65,7 +69,7 @@ func Open(ctx context.Context) (*DB, error) {
 
 func (d *DB) migrate(ctx context.Context) error {
 	sqlDB := stdlib.OpenDBFromPool(d.Pool)
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	goose.SetBaseFS(migrationsFS)
 
@@ -77,6 +81,7 @@ func (d *DB) migrate(ctx context.Context) error {
 	return goose.UpContext(ctx, sqlDB, "migrations")
 }
 
+// Close releases the connection pool.
 func (d *DB) Close() {
 	d.Pool.Close()
 }

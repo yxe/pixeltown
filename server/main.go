@@ -14,6 +14,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	port := os.Getenv("PORT")
 
 	if port == "" {
@@ -23,7 +29,7 @@ func main() {
 	d, err := db.Open(context.Background())
 
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		return fmt.Errorf("db: %w", err)
 	}
 
 	defer d.Close()
@@ -32,11 +38,11 @@ func main() {
 	authH, err := auth.New(s)
 
 	if err != nil {
-		log.Fatalf("auth: %v", err)
+		return fmt.Errorf("auth: %w", err)
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "pixeltown server up")
+		_, _ = fmt.Fprintln(w, "pixeltown server up")
 	})
 
 	http.HandleFunc("/api/auth/register/begin", authH.RegisterBegin)
@@ -44,7 +50,10 @@ func main() {
 
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		var n int
-		err := d.Pool.QueryRow(r.Context(), "SELECT count(*) FROM users").Scan(&n)
+		err := d.Pool.QueryRow(
+			r.Context(),
+			"SELECT count(*) FROM users",
+		).Scan(&n)
 
 		if err != nil {
 			log.Printf("health: %v", err)
@@ -53,9 +62,12 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "users": n})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    true,
+			"users": n,
+		})
 	})
 
 	log.Printf("listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	return http.ListenAndServe(":"+port, nil)
 }

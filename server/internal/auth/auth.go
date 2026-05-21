@@ -1,3 +1,5 @@
+// Package auth wires the WebAuthn library to the store + holds
+// an in-memory challenge store keyed by opaque session id.
 package auth
 
 import (
@@ -14,15 +16,19 @@ import (
 	"pixeltown/server/internal/store"
 )
 
+// Auth bundles the dependencies the HTTP handlers need.
 type Auth struct {
 	Store    *store.Store
 	WebAuthn *webauthn.WebAuthn
 	Sessions *SessionStore
 }
 
+// New constructs an Auth from a Store, reading RP config from env
+// (RPID, RP_DISPLAY_NAME, RP_ORIGIN_WEB, RP_ORIGIN_API) with
+// dev-friendly defaults.
 func New(s *store.Store) (*Auth, error) {
 	wa, err := webauthn.New(&webauthn.Config{
-		RPID: env("RPID", "localhost"),
+		RPID:          env("RPID", "localhost"),
 		RPDisplayName: env("RP_DISPLAY_NAME", "Pixeltown (dev)"),
 		RPOrigins: []string{
 			env("RP_ORIGIN_WEB", "http://localhost:5173"),
@@ -58,6 +64,7 @@ func (u *webauthnUser) WebAuthnID() []byte {
 	b, _ := u.User.ID.MarshalBinary()
 	return b
 }
+
 func (u *webauthnUser) WebAuthnName() string {
 	return u.User.Username
 }
@@ -70,6 +77,8 @@ func (u *webauthnUser) WebAuthnCredentials() []webauthn.Credential {
 	return u.Creds
 }
 
+// SessionStore holds in-flight WebAuthn challenges between the
+// begin and finish steps of a registration or login.
 type SessionStore struct {
 	mu       sync.Mutex
 	sessions map[string]sessionEntry
@@ -81,10 +90,13 @@ type sessionEntry struct {
 	Expires time.Time
 }
 
+// NewSessionStore returns an empty SessionStore.
 func NewSessionStore() *SessionStore {
 	return &SessionStore{sessions: make(map[string]sessionEntry)}
 }
 
+// Put stores data under a fresh opaque id and returns it. The
+// entry expires after ttl.
 func (s *SessionStore) Put(
 	data webauthn.SessionData,
 	userID uuid.UUID,
@@ -102,6 +114,8 @@ func (s *SessionStore) Put(
 	return id
 }
 
+// Take removes and returns the entry for id, or (nil, false) on
+// miss or expiry. Entries are single-use.
 func (s *SessionStore) Take(id string) (*sessionEntry, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

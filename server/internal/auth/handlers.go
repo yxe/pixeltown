@@ -16,9 +16,12 @@ type registerBeginReq struct {
 
 type registerBeginResp struct {
 	SessionID string `json:"sessionId"`
-	Options any `json:"options"`
+	Options   any    `json:"options"`
 }
 
+// RegisterBegin starts a WebAuthn registration. The browser calls
+// this with a desired username + email; we return a session id and
+// the credential-creation options to feed to navigator.credentials.create.
 func (a *Auth) RegisterBegin(w http.ResponseWriter, r *http.Request) {
 	var body registerBeginReq
 
@@ -36,6 +39,8 @@ type registerFinishReq struct {
 	Credential json.RawMessage `json:"credential"`
 }
 
+// RegisterFinish verifies the credential the browser produced and
+// persists the new user + passkey row on success.
 func (a *Auth) RegisterFinish(w http.ResponseWriter, r *http.Request) {
 	var body registerFinishReq
 
