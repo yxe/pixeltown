@@ -4,6 +4,8 @@ WORKDIR /app
 
 RUN go install github.com/air-verse/air@latest
 
+RUN go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
 COPY go.mod* go.sum* ./
 RUN if [ -f go.mod ]; then go mod download; fi
 
