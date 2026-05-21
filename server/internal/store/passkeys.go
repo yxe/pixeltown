@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Passkey is one row of the passkeys table.
@@ -21,9 +23,18 @@ type Passkey struct {
 }
 
 // CreatePasskey inserts a new credential for an existing user. On
-// success the ID and CreatedAt fields are filled in.
+// success the ID and CreatedAt fields are filled in on p.
 func (s *Store) CreatePasskey(ctx context.Context, p *Passkey) error {
-	return nil
+	return s.pool.QueryRow(ctx, `
+		INSERT INTO passkeys
+			(user_id, credential_id, public_key, sign_count,
+			 transports, nickname)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, created_at
+	`,
+		p.UserID, p.CredentialID, p.PublicKey, p.SignCount,
+		p.Transports, p.Nickname,
+	).Scan(&p.ID, &p.CreatedAt)
 }
 
 // FindPasskeysForUser returns every credential belonging to userID.
@@ -31,16 +42,62 @@ func (s *Store) FindPasskeysForUser(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]Passkey, error) {
-	return nil, nil
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, user_id, credential_id, public_key, sign_count,
+		       transports, nickname, created_at, last_used_at
+		FROM passkeys WHERE user_id = $1
+	`, userID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var out []Passkey
+	for rows.Next() {
+		var p Passkey
+
+		if err := rows.Scan(
+			&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
+			&p.SignCount, &p.Transports, &p.Nickname,
+			&p.CreatedAt, &p.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		out = append(out, p)
+	}
+
+	return out, rows.Err()
 }
 
-// FindPasskeyByCredentialID returns the passkey matching credID, or
-// (nil, nil) when no row matches.
+// FindPasskeyByCredentialID returns the passkey matching credID,
+// or (nil, nil) when no row matches.
 func (s *Store) FindPasskeyByCredentialID(
 	ctx context.Context,
 	credID []byte,
 ) (*Passkey, error) {
-	return nil, nil
+	var p Passkey
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, user_id, credential_id, public_key, sign_count,
+		       transports, nickname, created_at, last_used_at
+		FROM passkeys WHERE credential_id = $1
+	`, credID).Scan(
+		&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
+		&p.SignCount, &p.Transports, &p.Nickname,
+		&p.CreatedAt, &p.LastUsedAt,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &p, nil
 }
 
 // UpdatePasskeySignCount bumps sign_count and stamps last_used_at.
@@ -49,5 +106,9 @@ func (s *Store) UpdatePasskeySignCount(
 	id uuid.UUID,
 	newCount uint32,
 ) error {
-	return nil
+	_, err := s.pool.Exec(ctx, `
+		UPDATE passkeys SET sign_count = $1, last_used_at = now()
+		WHERE id = $2
+	`, newCount, id)
+	return err
 }
