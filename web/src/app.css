@@ -1,0 +1,10 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  background: #fafafa;
+  color: #08060d;
+  color-scheme: light dark;
+}
