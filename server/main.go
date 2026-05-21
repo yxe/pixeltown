@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 
+	"pixeltown/server/internal/auth"
 	"pixeltown/server/internal/db"
+	"pixeltown/server/internal/store"
 )
 
 func main() {
@@ -26,9 +28,19 @@ func main() {
 
 	defer d.Close()
 
+	s := store.New(d.Pool)
+	authH, err := auth.New(s)
+
+	if err != nil {
+		log.Fatalf("auth: %v", err)
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "pixeltown server up")
 	})
+
+	http.HandleFunc("/api/auth/register/begin", authH.RegisterBegin)
+	http.HandleFunc("/api/auth/register/finish", authH.RegisterFinish)
 
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		var n int
