@@ -43,12 +43,12 @@ func (s *Store) CreateUserWithPasskey(
 	err = tx.QueryRow(ctx, `
 		INSERT INTO passkeys
 			(user_id, credential_id, public_key, sign_count,
-			 transports, nickname)
-		VALUES ($1, $2, $3, $4, $5, $6)
+			 transports, backup_eligible, backup_state, nickname)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`,
 		p.UserID, p.CredentialID, p.PublicKey, p.SignCount,
-		p.Transports, p.Nickname,
+		p.Transports, p.BackupEligible, p.BackupState, p.Nickname,
 	).Scan(&p.ID, &p.CreatedAt)
 
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"pixeltown/server/internal/store"
@@ -74,6 +75,35 @@ func (u *webauthnUser) WebAuthnDisplayName() string {
 
 func (u *webauthnUser) WebAuthnCredentials() []webauthn.Credential {
 	return u.Creds
+}
+
+// passkeysToCredentials adapts persisted Passkey rows to the
+// Credential shape the webauthn lib expects for login.
+func passkeysToCredentials(ps []store.Passkey) []webauthn.Credential {
+	out := make([]webauthn.Credential, len(ps))
+
+	for i, p := range ps {
+		transports := make([]protocol.AuthenticatorTransport, len(p.Transports))
+
+		for j, t := range p.Transports {
+			transports[j] = protocol.AuthenticatorTransport(t)
+		}
+
+		out[i] = webauthn.Credential{
+			ID:        p.CredentialID,
+			PublicKey: p.PublicKey,
+			Transport: transports,
+			Flags: webauthn.CredentialFlags{
+				BackupEligible: p.BackupEligible,
+				BackupState:    p.BackupState,
+			},
+			Authenticator: webauthn.Authenticator{
+				SignCount: p.SignCount,
+			},
+		}
+	}
+
+	return out
 }
 
 // SessionStore holds in-flight WebAuthn challenges between the

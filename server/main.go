@@ -47,6 +47,8 @@ func run() error {
 
 	http.HandleFunc("/api/auth/register/begin", authH.RegisterBegin)
 	http.HandleFunc("/api/auth/register/finish", authH.RegisterFinish)
+	http.HandleFunc("/api/auth/login/begin", authH.LoginBegin)
+	http.HandleFunc("/api/auth/login/finish", authH.LoginFinish)
 
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		var n int

@@ -11,15 +11,17 @@ import (
 
 // Passkey is one row of the passkeys table.
 type Passkey struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	CredentialID []byte
-	PublicKey    []byte
-	SignCount    uint32
-	Transports   []string
-	Nickname     *string
-	CreatedAt    time.Time
-	LastUsedAt   *time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      uint32
+	Transports     []string
+	BackupEligible bool
+	BackupState    bool
+	Nickname       *string
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
 }
 
 // CreatePasskey inserts a new credential for an existing user. On
@@ -28,12 +30,12 @@ func (s *Store) CreatePasskey(ctx context.Context, p *Passkey) error {
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO passkeys
 			(user_id, credential_id, public_key, sign_count,
-			 transports, nickname)
-		VALUES ($1, $2, $3, $4, $5, $6)
+			 transports, backup_eligible, backup_state, nickname)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`,
 		p.UserID, p.CredentialID, p.PublicKey, p.SignCount,
-		p.Transports, p.Nickname,
+		p.Transports, p.BackupEligible, p.BackupState, p.Nickname,
 	).Scan(&p.ID, &p.CreatedAt)
 }
 
@@ -44,7 +46,8 @@ func (s *Store) FindPasskeysForUser(
 ) ([]Passkey, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, user_id, credential_id, public_key, sign_count,
-		       transports, nickname, created_at, last_used_at
+		       transports, backup_eligible, backup_state, nickname,
+		       created_at, last_used_at
 		FROM passkeys WHERE user_id = $1
 	`, userID)
 
@@ -60,8 +63,9 @@ func (s *Store) FindPasskeysForUser(
 
 		if err := rows.Scan(
 			&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
-			&p.SignCount, &p.Transports, &p.Nickname,
-			&p.CreatedAt, &p.LastUsedAt,
+			&p.SignCount, &p.Transports,
+			&p.BackupEligible, &p.BackupState,
+			&p.Nickname, &p.CreatedAt, &p.LastUsedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -81,12 +85,14 @@ func (s *Store) FindPasskeyByCredentialID(
 	var p Passkey
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, user_id, credential_id, public_key, sign_count,
-		       transports, nickname, created_at, last_used_at
+		       transports, backup_eligible, backup_state, nickname,
+		       created_at, last_used_at
 		FROM passkeys WHERE credential_id = $1
 	`, credID).Scan(
 		&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
-		&p.SignCount, &p.Transports, &p.Nickname,
-		&p.CreatedAt, &p.LastUsedAt,
+		&p.SignCount, &p.Transports,
+		&p.BackupEligible, &p.BackupState,
+		&p.Nickname, &p.CreatedAt, &p.LastUsedAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -100,15 +106,19 @@ func (s *Store) FindPasskeyByCredentialID(
 	return &p, nil
 }
 
-// UpdatePasskeySignCount bumps sign_count and stamps last_used_at.
-func (s *Store) UpdatePasskeySignCount(
+// UpdatePasskeyAfterLogin bumps sign_count, refreshes backup_state
+// (it can toggle when a device backs up or restores a credential),
+// and stamps last_used_at.
+func (s *Store) UpdatePasskeyAfterLogin(
 	ctx context.Context,
 	id uuid.UUID,
 	newCount uint32,
+	backupState bool,
 ) error {
 	_, err := s.pool.Exec(ctx, `
-		UPDATE passkeys SET sign_count = $1, last_used_at = now()
-		WHERE id = $2
-	`, newCount, id)
+		UPDATE passkeys
+		SET sign_count = $1, backup_state = $2, last_used_at = now()
+		WHERE id = $3
+	`, newCount, backupState, id)
 	return err
 }
