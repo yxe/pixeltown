@@ -1,0 +1,20 @@
+# Go
+server/tmp/
+server/main
+server/*.exe
+server/coverage.out
+
+# Node / Vite
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+
+# Env
+.env
+.env.local
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
