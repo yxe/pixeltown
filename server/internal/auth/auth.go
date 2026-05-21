@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 
 	"pixeltown/server/internal/store"
 )
@@ -86,7 +85,7 @@ type SessionStore struct {
 
 type sessionEntry struct {
 	Data    webauthn.SessionData
-	UserID  uuid.UUID
+	User    *store.User
 	Expires time.Time
 }
 
@@ -95,11 +94,11 @@ func NewSessionStore() *SessionStore {
 	return &SessionStore{sessions: make(map[string]sessionEntry)}
 }
 
-// Put stores data under a fresh opaque id and returns it. The
-// entry expires after ttl.
+// Put stores data + the staged user under a fresh opaque id and
+// returns it. The entry expires after ttl.
 func (s *SessionStore) Put(
 	data webauthn.SessionData,
-	userID uuid.UUID,
+	user *store.User,
 	ttl time.Duration,
 ) string {
 	id := randomID()
@@ -107,7 +106,7 @@ func (s *SessionStore) Put(
 	defer s.mu.Unlock()
 	s.sessions[id] = sessionEntry{
 		Data:    data,
-		UserID:  userID,
+		User:    user,
 		Expires: time.Now().Add(ttl),
 	}
 	s.gc()
